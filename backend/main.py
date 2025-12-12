@@ -29,6 +29,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 # 1. Base schema (shared fields)
 class SweetBase(BaseModel):
     name: str
+    category: str
     price: float
     quantity: int
 
@@ -39,9 +40,8 @@ class SweetCreate(SweetBase):
 # 3. Schema for READING (Output) - Includes ID
 class SweetResponse(SweetBase):
     id: int
-
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserSchema(BaseModel):
     username: str
@@ -107,7 +107,7 @@ def login(user: LoginSchema, db: Session = Depends(get_db)):
 # Updated to use SweetCreate for input, SweetResponse for output
 @app.post("/api/sweets", response_model=SweetResponse, status_code=201)
 def create_sweet(sweet: SweetCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    new_sweet = models.Sweet(name=sweet.name, price=sweet.price, quantity=sweet.quantity)
+    new_sweet = models.Sweet(name=sweet.name, category=sweet.category, price=sweet.price, quantity=sweet.quantity)
     db.add(new_sweet)
     db.commit()
     db.refresh(new_sweet)
@@ -135,3 +135,29 @@ def purchase_sweet(sweet_id: int, db: Session = Depends(get_db), current_user: m
     db.commit()
     db.refresh(sweet)
     return {"message": "Purchase successful", "remaining_quantity": sweet.quantity}
+
+@app.put("/api/sweets/{sweet_id}", response_model=SweetResponse)
+def update_sweet(sweet_id: int, sweet: SweetCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_sweet = db.query(models.Sweet).filter(models.Sweet.id == sweet_id).first()
+    if not db_sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+    
+    db_sweet.name = sweet.name
+    db_sweet.category = sweet.category
+    db_sweet.price = sweet.price
+    db_sweet.quantity = sweet.quantity
+    
+    db.commit()
+    db.refresh(db_sweet)
+    return db_sweet
+
+@app.delete("/api/sweets/{sweet_id}", status_code=204)
+def delete_sweet(sweet_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Note: In a real app, you would check if current_user.is_admin here
+    db_sweet = db.query(models.Sweet).filter(models.Sweet.id == sweet_id).first()
+    if not db_sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+    
+    db.delete(db_sweet)
+    db.commit()
+    return None

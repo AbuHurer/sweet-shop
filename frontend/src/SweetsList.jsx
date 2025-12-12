@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 function SweetsList() {
   const [sweets, setSweets] = useState([]);
   const [search, setSearch] = useState('');
-  const [newSweet, setNewSweet] = useState({ name: '', price: '', quantity: '' });
+  const [newSweet, setNewSweet] = useState({ name: '', category: '', price: '', quantity: '' });
   const navigate = useNavigate();
 
   const getToken = () => localStorage.getItem('token');
@@ -32,6 +32,17 @@ function SweetsList() {
   const handleSearch = (e) => {
     setSearch(e.target.value);
     fetchSweets(e.target.value);
+  };
+
+  const handleDelete = async (id) => {
+    if(!confirm("Are you sure you want to delete this sweet?")) return;
+    const token = getToken();
+    try {
+      await axios.delete(`/api/sweets/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      fetchSweets(search);
+    } catch (err) {
+      alert("Failed to delete");
+    }
   };
 
   const handlePurchase = async (id) => {
@@ -98,36 +109,28 @@ function SweetsList() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '25px' }}>
         {sweets.map(sweet => (
           <div key={sweet.id} style={{ 
-            border: '1px solid #fa0505ff', 
-            padding: '20px', 
-            borderRadius: '12px', 
-            boxShadow: '0 4px 15px rgba(0,0,0,0.05)', 
-            backgroundColor: 'white',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center'
+            padding: '20px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', backgroundColor: 'white',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative'
           }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.4rem', color: '#333' }}>{sweet.name}</h3>
-            <p style={{ fontSize: '1.2rem', color: '#000000ff' }}>${sweet.price}</p>
+            {/* Delete Button (Small X in corner) */}
+            <button 
+              onClick={() => handleDelete(sweet.id)}
+              style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
+            >✕</button>
+
+            <h3 style={{ margin: '0 0 5px 0', fontSize: '1.4rem', color: '#333' }}>{sweet.name}</h3>
+            {/* NEW: Category Badge */}
+            <span style={{ background: '#eee', color: '#555', padding: '2px 8px', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '10px' }}>
+              {sweet.category}
+            </span>
+            
+            <p style={{ fontSize: '1.2rem', color: '#666' }}>${sweet.price}</p>
             <p style={{ color: sweet.quantity === 0 ? 'red' : 'green', fontWeight: 'bold', marginBottom: '15px' }}>
               {sweet.quantity > 0 ? `${sweet.quantity} in stock` : 'Out of Stock'}
             </p>
-            <button 
-              onClick={() => handlePurchase(sweet.id)}
-              disabled={sweet.quantity === 0}
-              style={{ 
-                width: '100%', 
-                padding: '12px', 
-                background: sweet.quantity === 0 ? '#e0e0e0' : '#007bff', 
-                color: sweet.quantity === 0 ? '#888' : 'white', 
-                border: 'none', 
-                borderRadius: '8px',
-                cursor: sweet.quantity === 0 ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold',
-                transition: 'background 0.2s'
-              }}
-            >
+            
+            <button onClick={() => handlePurchase(sweet.id)} disabled={sweet.quantity === 0}
+              style={{ width: '100%', padding: '12px', background: sweet.quantity === 0 ? '#e0e0e0' : '#007bff', color: sweet.quantity === 0 ? '#888' : 'white', border: 'none', borderRadius: '8px', cursor: sweet.quantity === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
               {sweet.quantity === 0 ? 'Sold Out' : 'Buy Now'}
             </button>
           </div>
@@ -135,22 +138,18 @@ function SweetsList() {
       </div>
 
       {/* Restock Form */}
-      <div style={{ marginTop: '60px', borderTop: '2px dashed #eee', paddingTop: '30px', textAlign: 'center' }}>
-        <h3 style={{ color: '#555', marginBottom: '20px' }}>Admin Restock</h3>
+      <div style={{ marginTop: '60px', borderTop: '2px dashed #555', paddingTop: '30px', textAlign: 'center' }}>
+        <h3 style={{ color: '#ccc', marginBottom: '20px' }}>Admin Restock</h3>
         <form onSubmit={handleAddSweet} style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <input placeholder="Name" value={newSweet.name} onChange={e => setNewSweet({...newSweet, name: e.target.value})} required 
-            style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc' }} />
-          <input placeholder="Price" type="number" step="0.01" value={newSweet.price} onChange={e => setNewSweet({...newSweet, price: e.target.value})} required 
-            style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '80px' }} />
-          <input placeholder="Qty" type="number" value={newSweet.quantity} onChange={e => setNewSweet({...newSweet, quantity: e.target.value})} required 
-            style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '80px' }} />
-          <button type="submit" style={{ background: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>
-            Add Stock
-          </button>
+          <input placeholder="Name" value={newSweet.name} onChange={e => setNewSweet({...newSweet, name: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+          {/* NEW: Category Input */}
+          <input placeholder="Category" value={newSweet.category} onChange={e => setNewSweet({...newSweet, category: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+          <input placeholder="Price" type="number" step="0.01" value={newSweet.price} onChange={e => setNewSweet({...newSweet, price: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none', width: '80px' }} />
+          <input placeholder="Qty" type="number" value={newSweet.quantity} onChange={e => setNewSweet({...newSweet, quantity: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none', width: '80px' }} />
+          <button type="submit" style={{ background: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>Add Stock</button>
         </form>
       </div>
     </div>
   );
 }
-
 export default SweetsList;

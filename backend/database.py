@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # This creates a file named 'sweets.db' in your folder
-SQLALCHEMY_DATABASE_URL = "sqlite:///./sweets.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./sweets_v3.db"
 
 # connect_args is needed only for SQLite
 engine = create_engine(
