@@ -61,3 +61,46 @@ def test_search_sweets_by_name():
     data = response.json()
     assert len(data) >= 1
     assert "Sour" in data[0]["name"]
+
+# ... existing tests ...
+
+def test_purchase_sweet():
+    # 1. Create a sweet with 10 items
+    token = get_auth_token()
+    create_response = client.post(
+        "/api/sweets",
+        json={"name": "KitKat", "price": 1.0, "quantity": 10},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    sweet_id = create_response.json()["id"]
+
+    # 2. Buy one
+    purchase_response = client.post(
+        f"/api/sweets/{sweet_id}/purchase",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert purchase_response.status_code == 200
+    
+    # 3. Verify stock decreased
+    get_response = client.get("/api/sweets")
+    # Find our specific sweet in the list
+    my_sweet = next(s for s in get_response.json() if s["id"] == sweet_id)
+    assert my_sweet["quantity"] == 9
+
+def test_purchase_out_of_stock():
+    # 1. Create a sweet with 0 items
+    token = get_auth_token()
+    create_response = client.post(
+        "/api/sweets",
+        json={"name": "Air", "price": 0.0, "quantity": 0},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    sweet_id = create_response.json()["id"]
+
+    # 2. Try to buy
+    response = client.post(
+        f"/api/sweets/{sweet_id}/purchase",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Out of stock"
