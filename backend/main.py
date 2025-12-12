@@ -6,12 +6,17 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import jwt # NEW: For creating tokens
-
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer # NEW IMPORT
+import jose
 from database import engine, get_db, Base
 import models
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
+
+# NEW: Security Scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 app = FastAPI()
 
@@ -33,6 +38,12 @@ class LoginSchema(BaseModel):
     username: str
     password: str
 
+class SweetSchema(BaseModel):
+    name: str
+    price: float
+    quantity: int
+
+
 # --- HELPER FUNCTIONS ---
 def get_password_hash(password):
     return pwd_context.hash(password)
@@ -47,6 +58,19 @@ def create_access_token(data: dict): # NEW
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    except jose.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    user = db.query(models.User).filter(models.User.username == username).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
 # --- ENDPOINTS ---
 
 @app.post("/api/auth/register", status_code=201)
@@ -81,3 +105,11 @@ def login(user: LoginSchema, db: Session = Depends(get_db)):
     
     # 4. Return Token
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/api/sweets", status_code=201)
+def create_sweet(sweet: SweetSchema, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    new_sweet = models.Sweet(name=sweet.name, price=sweet.price, quantity=sweet.quantity)
+    db.add(new_sweet)
+    db.commit()
+    db.refresh(new_sweet)
+    return new_sweet
