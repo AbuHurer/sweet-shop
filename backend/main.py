@@ -11,7 +11,7 @@ from fastapi.security import OAuth2PasswordBearer # NEW IMPORT
 import jose
 from database import engine, get_db, Base
 import models
-
+from typing import List, Optional # Add List to imports if not present
 # Create tables
 models.Base.metadata.create_all(bind=engine)
 
@@ -113,3 +113,19 @@ def create_sweet(sweet: SweetSchema, db: Session = Depends(get_db), current_user
     db.commit()
     db.refresh(new_sweet)
     return new_sweet
+
+# NEW: Get All Sweets
+@app.get("/api/sweets", response_model=List[SweetSchema])
+def get_sweets(db: Session = Depends(get_db)):
+    sweets = db.query(models.Sweet).all()
+    return sweets
+
+# NEW: Search Sweets
+@app.get("/api/sweets/search", response_model=List[SweetSchema])
+def search_sweets(name: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Sweet)
+    if name:
+        # ILIKE is not supported in standard SQLite (it is case sensitive), 
+        # so we use standard 'like' with wildcards for this simple Kata.
+        query = query.filter(models.Sweet.name.contains(name))
+    return query.all()

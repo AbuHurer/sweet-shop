@@ -39,3 +39,25 @@ def test_create_sweet_authorized():
     data = response.json()
     assert data["name"] == "Lollipop"
     assert "id" in data
+
+def test_list_sweets():
+    # We already added sweets in previous tests, but let's ensure we can fetch them
+    response = client.get("/api/sweets")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+def test_search_sweets_by_name():
+    # First, add a specific sweet to search for
+    token = get_auth_token()
+    client.post(
+        "/api/sweets",
+        json={"name": "Super Sour Candy", "price": 2.0, "quantity": 50},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    
+    # Search for "Sour"
+    response = client.get("/api/sweets/search?name=Sour")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    assert "Sour" in data[0]["name"]
