@@ -1,57 +1,64 @@
 # backend/main.py
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-from jose import jwt # NEW: For creating tokens
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer # NEW IMPORT
+from jose import jwt, JWTError
 import jose
+
 from database import engine, get_db, Base
 import models
-from typing import List, Optional # Add List to imports if not present
-# Create tables
-models.Base.metadata.create_all(bind=engine)
 
-# NEW: Security Scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# --- SECURITY CONFIGURATION (NEW) ---
-# In a real app, hide this SECRET_KEY in an environment variable!
+# --- SECURITY ---
 SECRET_KEY = "supersecretkey" 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# --- SCHEMAS ---
-class UserSchema(BaseModel):
-    username: str
-    password: str
+# --- SCHEMAS (FIXED) ---
 
-# NEW: Schema for Login Request
-class LoginSchema(BaseModel):
-    username: str
-    password: str
-
-class SweetSchema(BaseModel):
+# 1. Base schema (shared fields)
+class SweetBase(BaseModel):
     name: str
     price: float
     quantity: int
 
+# 2. Schema for CREATING (Input) - No ID required
+class SweetCreate(SweetBase):
+    pass
 
-# --- HELPER FUNCTIONS ---
+# 3. Schema for READING (Output) - Includes ID
+class SweetResponse(SweetBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+class UserSchema(BaseModel):
+    username: str
+    password: str
+
+class LoginSchema(BaseModel):
+    username: str
+    password: str
+
+# --- HELPERS ---
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def verify_password(plain_password, hashed_password): # NEW
+def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: dict): # NEW
+def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
@@ -64,13 +71,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-    except jose.JWTError:
+    except JWTError:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
     return user
+
 # --- ENDPOINTS ---
 
 @app.post("/api/auth/register", status_code=201)
@@ -78,7 +85,6 @@ def register(user: UserSchema, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    
     hashed_password = get_password_hash(user.password)
     new_user = models.User(username=user.username, hashed_password=hashed_password)
     db.add(new_user)
@@ -86,46 +92,46 @@ def register(user: UserSchema, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return {"message": "User created successfully"}
 
-# NEW: Login Endpoint
 @app.post("/api/auth/login")
 def login(user: LoginSchema, db: Session = Depends(get_db)):
-    # 1. Find user
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
-    
-    # 2. Check if user exists AND password matches
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # 3. Create Token
     access_token = create_access_token(data={"sub": db_user.username})
-    
-    # 4. Return Token
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/api/sweets", status_code=201)
-def create_sweet(sweet: SweetSchema, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+# Updated to use SweetCreate for input, SweetResponse for output
+@app.post("/api/sweets", response_model=SweetResponse, status_code=201)
+def create_sweet(sweet: SweetCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     new_sweet = models.Sweet(name=sweet.name, price=sweet.price, quantity=sweet.quantity)
     db.add(new_sweet)
     db.commit()
     db.refresh(new_sweet)
     return new_sweet
 
-# NEW: Get All Sweets
-@app.get("/api/sweets", response_model=List[SweetSchema])
+@app.get("/api/sweets", response_model=List[SweetResponse])
 def get_sweets(db: Session = Depends(get_db)):
-    sweets = db.query(models.Sweet).all()
-    return sweets
+    return db.query(models.Sweet).all()
 
-# NEW: Search Sweets
-@app.get("/api/sweets/search", response_model=List[SweetSchema])
+@app.get("/api/sweets/search", response_model=List[SweetResponse])
 def search_sweets(name: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(models.Sweet)
     if name:
-        # ILIKE is not supported in standard SQLite (it is case sensitive), 
-        # so we use standard 'like' with wildcards for this simple Kata.
         query = query.filter(models.Sweet.name.contains(name))
     return query.all()
+
+@app.post("/api/sweets/{sweet_id}/purchase")
+def purchase_sweet(sweet_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    sweet = db.query(models.Sweet).filter(models.Sweet.id == sweet_id).first()
+    if not sweet:
+        raise HTTPException(status_code=404, detail="Sweet not found")
+    if sweet.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Out of stock")
+    sweet.quantity -= 1
+    db.commit()
+    db.refresh(sweet)
+    return {"message": "Purchase successful", "remaining_quantity": sweet.quantity}
