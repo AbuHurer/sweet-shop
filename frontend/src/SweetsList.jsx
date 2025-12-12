@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 function SweetsList() {
   const [sweets, setSweets] = useState([]);
   const [search, setSearch] = useState('');
+  // Updated state to include category
   const [newSweet, setNewSweet] = useState({ name: '', category: '', price: '', quantity: '' });
   const navigate = useNavigate();
 
@@ -34,17 +35,6 @@ function SweetsList() {
     fetchSweets(e.target.value);
   };
 
-  const handleDelete = async (id) => {
-    if(!confirm("Are you sure you want to delete this sweet?")) return;
-    const token = getToken();
-    try {
-      await axios.delete(`/api/sweets/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-      fetchSweets(search);
-    } catch (err) {
-      alert("Failed to delete");
-    }
-  };
-
   const handlePurchase = async (id) => {
     const token = getToken();
     try {
@@ -56,30 +46,37 @@ function SweetsList() {
     }
   };
 
+  // NEW: Delete Functionality
+  const handleDelete = async (id) => {
+    if(!confirm("Are you sure you want to delete this sweet?")) return;
+    const token = getToken();
+    try {
+      await axios.delete(`/api/sweets/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      fetchSweets(search);
+    } catch (err) {
+      alert("Failed to delete");
+    }
+  };
+
   const handleAddSweet = async (e) => {
     e.preventDefault();
     const token = getToken();
     try {
       await axios.post('/api/sweets', newSweet, { headers: { Authorization: `Bearer ${token}` } });
-      setNewSweet({ name: '', price: '', quantity: '' });
+      // Clear form (including category)
+      setNewSweet({ name: '', category: '', price: '', quantity: '' });
       fetchSweets(search);
     } catch (err) {
-      alert("Failed to add sweet");
+      alert("Failed to add sweet. Make sure all fields including Category are filled.");
     }
   };
 
   return (
-    // Main Container centered with max-width
-    <div style={{ 
-      maxWidth: '1200px', 
-      margin: '0 auto', 
-      padding: '40px 20px', 
-      fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' 
-    }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px', fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>
       
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h1 style={{ color: '#fff444' }}>🍭 Sweet Shop Inventory</h1>
+        <h1 style={{ color: '#fff' }}>🍭 Sweet Shop Inventory</h1>
         <button onClick={() => { localStorage.removeItem('token'); navigate('/login'); }} 
           style={{ background: '#ff4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>
           Logout
@@ -93,15 +90,7 @@ function SweetsList() {
           placeholder="🔍 Search for sweets..." 
           value={search}
           onChange={handleSearch}
-          style={{ 
-            padding: '15px', 
-            width: '100%', 
-            maxWidth: '500px', 
-            fontSize: '16px', 
-            borderRadius: '25px', 
-            border: '1px solid #ddd', 
-            boxShadow: '0 2px 5px rgba(0,0,0,0.05)' 
-          }}
+          style={{ padding: '15px', width: '100%', maxWidth: '500px', fontSize: '16px', borderRadius: '25px', border: 'none', outline: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}
         />
       </div>
 
@@ -112,13 +101,16 @@ function SweetsList() {
             padding: '20px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.2)', backgroundColor: 'white',
             display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative'
           }}>
-            {/* Delete Button (Small X in corner) */}
+            
+            {/* NEW: Delete Button */}
             <button 
               onClick={() => handleDelete(sweet.id)}
               style={{ position: 'absolute', top: '10px', right: '10px', background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
+              title="Delete Sweet"
             >✕</button>
 
             <h3 style={{ margin: '0 0 5px 0', fontSize: '1.4rem', color: '#333' }}>{sweet.name}</h3>
+            
             {/* NEW: Category Badge */}
             <span style={{ background: '#eee', color: '#555', padding: '2px 8px', borderRadius: '10px', fontSize: '0.8rem', marginBottom: '10px' }}>
               {sweet.category}
@@ -129,8 +121,11 @@ function SweetsList() {
               {sweet.quantity > 0 ? `${sweet.quantity} in stock` : 'Out of Stock'}
             </p>
             
-            <button onClick={() => handlePurchase(sweet.id)} disabled={sweet.quantity === 0}
-              style={{ width: '100%', padding: '12px', background: sweet.quantity === 0 ? '#e0e0e0' : '#007bff', color: sweet.quantity === 0 ? '#888' : 'white', border: 'none', borderRadius: '8px', cursor: sweet.quantity === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+            <button 
+              onClick={() => handlePurchase(sweet.id)}
+              disabled={sweet.quantity === 0}
+              style={{ width: '100%', padding: '12px', background: sweet.quantity === 0 ? '#e0e0e0' : '#007bff', color: sweet.quantity === 0 ? '#888' : 'white', border: 'none', borderRadius: '8px', cursor: sweet.quantity === 0 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+            >
               {sweet.quantity === 0 ? 'Sold Out' : 'Buy Now'}
             </button>
           </div>
@@ -142,8 +137,10 @@ function SweetsList() {
         <h3 style={{ color: '#ccc', marginBottom: '20px' }}>Admin Restock</h3>
         <form onSubmit={handleAddSweet} style={{ display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <input placeholder="Name" value={newSweet.name} onChange={e => setNewSweet({...newSweet, name: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
-          {/* NEW: Category Input */}
+          
+          {/* NEW: Category Input - Critical for backend validation */}
           <input placeholder="Category" value={newSweet.category} onChange={e => setNewSweet({...newSweet, category: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none' }} />
+          
           <input placeholder="Price" type="number" step="0.01" value={newSweet.price} onChange={e => setNewSweet({...newSweet, price: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none', width: '80px' }} />
           <input placeholder="Qty" type="number" value={newSweet.quantity} onChange={e => setNewSweet({...newSweet, quantity: e.target.value})} required style={{ padding: '10px', borderRadius: '5px', border: 'none', width: '80px' }} />
           <button type="submit" style={{ background: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>Add Stock</button>
@@ -152,4 +149,5 @@ function SweetsList() {
     </div>
   );
 }
+
 export default SweetsList;
